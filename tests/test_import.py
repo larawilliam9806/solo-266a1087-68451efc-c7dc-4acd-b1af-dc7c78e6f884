@@ -105,3 +105,30 @@ def test_bare_jump_table_without_order_uses_csv_columns():
     assert [q["id"] for q in definition] == ["Q1", "Q2", "Q3"]
     stored = importer.to_import_answers(definition, rows)["H1"]
     assert stored == {((), "Q1"): "租赁", (("Q1",), "Q3"): "100"}
+
+
+ROSTER_TEXT = """抽样位,主户号,候补户号
+S1,H1,
+S2,H2,H3
+S3,H4,H3
+"""
+
+
+def test_roster_parses_slots_and_optional_candidates():
+    entries, warnings = importer.parse_roster(
+        ROSTER_TEXT.encode("utf-8"),
+        {"H1": 1, "H2": 2, "H3": 3, "H4": 4})
+    assert warnings == []
+    assert entries == [
+        {"slot_no": "S1", "main_id": 1, "substitute_ids": []},
+        {"slot_no": "S2", "main_id": 2, "substitute_ids": [3]},
+        {"slot_no": "S3", "main_id": 4, "substitute_ids": [3]},
+    ]
+
+
+def test_roster_tolerates_bom_and_gbk():
+    entries, _ = importer.parse_roster(
+        ROSTER_TEXT.encode("gb18030"),
+        {"H1": 1, "H2": 2, "H3": 3, "H4": 4})
+    assert [entry["slot_no"] for entry in entries] == ["S1", "S2", "S3"]
+

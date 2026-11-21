@@ -9,12 +9,105 @@
         {{ question_count }} 道题</p>
     </div>
     <div class="actions">
-      <a class="button" href="{{ url_for('export_csv', batch_id=batch.id) }}">下载分析用 CSV</a>
+      <a class="button" href="{{ url_for('export_slots', batch_id=batch.id) }}">下载交卷清单 CSV</a>
+      <a class="button secondary" href="{{ url_for('export_csv', batch_id=batch.id) }}">下载全部分析 CSV</a>
     </div>
   </div>
 </section>
 
 <section class="card">
+  <h2>交卷清单</h2>
+  {% if not slots %}
+    <p class="muted">本批还没有名册。请先导入名册 CSV，清单会按抽样位列出实际入样户。</p>
+  {% else %}
+    <p class="muted">共 {{ slot_total }} 个抽样位，已入样 {{ filled }} 个。
+      每个抽样位只计一份答卷：先保留已锁定户，再纳入合格主户，
+      剩余空位按名册顺序使用尚未入样的合格候补。
+      空位注明原因；每次查看或下载都取自同一个已保存状态。</p>
+    <table class="slots">
+      <thead>
+        <tr>
+          <th>抽样位</th><th>入样户号</th><th>方式</th><th>当前路径</th>
+          <th>已答</th><th>首个漏答题</th><th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for entry in slots %}
+          <tr class="{{ 'empty-row' if not entry.household else '' }}">
+            <td class="strong" data-slot-id="{{ entry.slot_id }}">{{ entry.slot_no }}</td>
+            <td>
+              {% if entry.household %}
+                <a href="{{ url_for('household', batch_id=batch.id, household_id=entry.household_id) }}">
+                  {{ entry.household.household_no }}</a>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="badge {{ entry.status }}">{{ entry.status_label }}</span>
+            </td>
+            <td class="route">{{ entry.route|join(" → ") or "—" }}</td>
+            <td>{{ entry.answered }}</td>
+            <td>
+              {% if entry.household %}
+                {% if entry.missing %}
+                  <span class="badge missing">{{ entry.missing }}</span>
+                {% else %}
+                  <span class="badge ok">无</span>
+                {% endif %}
+              {% else %}
+                <span class="muted">空缺</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if entry.is_locked %}
+                <form method="post" class="inline"
+                      action="{{ url_for('unlock_slot', batch_id=batch.id, slot_id=entry.slot_id) }}">
+                  <button type="submit" class="small secondary">解锁</button>
+                </form>
+              {% elif entry.household %}
+                <form method="post" class="inline"
+                      action="{{ url_for('lock_slot', batch_id=batch.id, slot_id=entry.slot_id) }}">
+                  <input type="hidden" name="household_id" value="{{ entry.household_id }}">
+                  <button type="submit" class="small">锁定</button>
+                </form>
+              {% else %}
+                <span class="muted">—</span>
+              {% endif %}
+            </td>
+          </tr>
+          {% if not entry.household and entry.reason %}
+            <tr class="reason-row">
+              <td></td>
+              <td colspan="6" class="muted">空缺原因：{{ entry.reason }}</td>
+            </tr>
+          {% endif %}
+        {% endfor %}
+      </tbody>
+    </table>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>名册</h2>
+  {% if slots %}
+    <p class="muted">本批已导入名册，每批只能成功导入一份。如需更换名册，请新建批次。</p>
+  {% else %}
+    <p class="muted">上传名册 CSV，每行一个抽样位：抽样位、主户号、可留空的候补户号。
+      抽样位和主户号各自唯一；主户不能兼作候补；户号须在本批。
+      同一候补可以登记在多个抽样位。</p>
+    <form method="post" enctype="multipart/form-data"
+          action="{{ url_for('upload_roster', batch_id=batch.id) }}">
+      <label>名册 CSV
+        <input type="file" name="roster_file" accept=".csv,text/csv" required>
+      </label>
+      <button type="submit">导入名册</button>
+    </form>
+  {% endif %}
+</section>
+
+<section class="card">
+  <h2>全部答卷</h2>
   <table>
     <thead>
       <tr>

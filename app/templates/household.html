@@ -6,6 +6,11 @@
     <div>
       <p class="muted"><a href="{{ url_for('batch', batch_id=batch.id) }}">← 返回 {{ batch.name }}</a></p>
       <h1>户号 {{ household.household_no }}</h1>
+      {% if lock %}
+        <div class="flash warning">该户已锁定在抽样位 {{ lock.slot_no }}。
+          仍可改答：改后若答完当前路径且单选答案均在选项内，就用新答案交卷；
+          失去资格将拒绝保存并保留上次保存的答卷。</div>
+      {% endif %}
       <p class="muted">当前路径：
         {% for step in steps %}
           <span class="chip">{{ step.qid }}</span>{% if not loop.last %} → {% endif %}
@@ -82,7 +87,8 @@
     {% endif %}
 
     <button type="submit">保存</button>
-    <a class="button secondary" href="{{ url_for('export_csv', batch_id=batch.id) }}">下载分析用 CSV</a>
+    <a class="button secondary" href="{{ url_for('export_slots', batch_id=batch.id) }}">下载交卷清单 CSV</a>
+    <a class="button secondary" href="{{ url_for('batch', batch_id=batch.id) }}">返回交卷清单</a>
   </form>
   <p class="muted">提示：切换前面的单选题后，请先保存再用新路径继续填写；未保存的输入不会跟随路径移动。</p>
 </section>

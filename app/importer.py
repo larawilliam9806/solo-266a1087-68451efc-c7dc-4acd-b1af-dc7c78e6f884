@@ -203,3 +203,141 @@ def to_import_answers(definition, rows):
         _, answers = engine.import_row(definition, row["answers"])
         stored[row["household_no"]] = answers
     return stored
+
+
+# ---------------------------------------------------------------------------
+# Roster CSV: one row per sampling slot
+
+
+SLOT_HEADERS = ("抽样位", "抽样位号", "样本位", "样本位号", "位号",
+                "slot", "slot_no", "position")
+MAIN_HEADERS = ("主户号", "主户", "主户编号", "main", "main_household",
+                "main_household_no", "household_no")
+SUBSTITUTE_PREFIXES = ("候补户号", "候补户", "候补", "substitute",
+                       "substitute_household", "backup")
+_SUBSTITUTE_SPLIT = re.compile(r"[\s、,，;；/|]+")
+
+
+def _column_position(headers, candidates, prefixes=()):
+    for position, header in enumerate(headers):
+        lowered = _clean_header(header).lower()
+        if lowered in {candidate.lower() for candidate in candidates}:
+            return position
+    for position, header in enumerate(headers):
+        lowered = _clean_header(header).lower()
+        if any(lowered.startswith(prefix.lower()) for prefix in prefixes):
+            return position
+    return None
+
+
+def _substitute_positions(headers):
+    positions = []
+    for position, header in enumerate(headers):
+        cleaned = _clean_header(header)
+        lowered = cleaned.lower()
+        if any(lowered.startswith(prefix.lower())
+               for prefix in SUBSTITUTE_PREFIXES) or cleaned.startswith("候补"):
+            positions.append(position)
+    return positions
+
+
+def parse_roster(raw_csv, households):
+    """Parse a roster CSV into ordered slot entries.
+
+    ``households`` maps household number to its id in the batch.  The roster
+    must name every household; a slot number and a main household may each
+    appear only once.  One main household may not also be its own slot's
+    substitute, but the same substitute may be listed at several slots.
+
+    Returns ``(entries, warnings)`` where each entry is
+    ``{"slot_no", "main_id", "substitute_ids"}``.
+    """
+    rows = read_csv(raw_csv)
+    headers = [_clean_header(header) for header in rows[0]]
+    if not any(headers):
+        raise ImportError_("名册表头为空")
+
+    slot_position = _column_position(
+        headers, SLOT_HEADERS, prefixes=("抽样位", "样本位"))
+    main_position = _column_position(
+        headers, MAIN_HEADERS, prefixes=("主户号", "主户"))
+    substitute_positions = _substitute_positions(headers)
+    if slot_position is None:
+        raise ImportError_("名册缺少「抽样位」列")
+    if main_position is None:
+        raise ImportError_("名册缺少「主户号」列")
+    if not substitute_positions:
+        raise ImportError_("名册缺少「候补户号」列")
+
+    entries = []
+    warnings = []
+    seen_slots = set()
+    seen_mains = set()
+    for row_number, raw_row in enumerate(rows[1:], start=2):
+        if not any((cell or "").strip() for cell in raw_row):
+            continue
+
+        def cell(position):
+            return (raw_row[position] if position < len(raw_row) else "").strip()
+
+        slot_no = cell(slot_position)
+        main_no = cell(main_position)
+        if not slot_no:
+            raise ImportError_("名册第 %d 行缺少抽样位" % row_number)
+        if not main_no:
+            raise ImportError_("名册第 %d 行（抽样位 %s）缺少主户号"
+                               % (row_number, slot_no))
+        if slot_no in seen_slots:
+            raise ImportError_("名册第 %d 行抽样位 %s 重复"
+                               % (row_number, slot_no))
+        seen_slots.add(slot_no)
+        if main_no not in households:
+            raise ImportError_("名册第 %d 行主户号 %s 不在本批"
+                               % (row_number, main_no))
+        if main_no in seen_mains:
+            raise ImportError_("主户号 %s 在名册中出现了多个抽样位"
+                               % main_no)
+        seen_mains.add(main_no)
+
+        substitute_nos = []
+        for position in substitute_positions:
+            for value in _SUBSTITUTE_SPLIT.split(cell(position)):
+                if value and value not in substitute_nos:
+                    substitute_nos.append(value)
+        for substitute_no in substitute_nos:
+            if substitute_no not in households:
+                raise ImportError_(
+                    "名册第 %d 行候补户号 %s 不在本批"
+                    % (row_number, substitute_no))
+            if substitute_no == main_no:
+                raise ImportError_(
+                    "名册第 %d 行主户号 %s 不能同时作为本抽样位的候补"
+                    % (row_number, main_no))
+
+        entries.append({
+            "slot_no": slot_no,
+            "main_id": households[main_no],
+            "substitute_ids": [households[no] for no in substitute_nos],
+        })
+
+    if not entries:
+        raise ImportError_("名册中没有数据行")
+
+    # A main household may not also be a candidate substitute anywhere in the
+    # roster; candidates may be shared between slots.
+    mains = {entry["main_id"]: entry["slot_no"] for entry in entries}
+    for entry in entries:
+        for substitute_id in entry["substitute_ids"]:
+            if substitute_id in mains:
+                raise ImportError_(
+                    "户 %s 是抽样位 %s 的主户，不能兼作候补"
+                    % (_household_name(households, substitute_id),
+                       mains[substitute_id]))
+    return entries, warnings
+
+
+def _household_name(households, household_id):
+    for household_no, candidate in households.items():
+        if candidate == household_id:
+            return household_no
+    return str(household_id)

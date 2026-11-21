@@ -34,7 +34,8 @@
             <td>{{ item.created_at }}</td>
             <td>
               <a href="{{ url_for('batch', batch_id=item.id) }}">查看</a>
-              <a href="{{ url_for('export_csv', batch_id=item.id) }}">下载 CSV</a>
+              <a href="{{ url_for('export_slots', batch_id=item.id) }}">交卷清单</a>
+              <a href="{{ url_for('export_csv', batch_id=item.id) }}">全部答卷</a>
             </td>
           </tr>
         {% endfor %}

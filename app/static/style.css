@@ -106,6 +106,22 @@ th { color: var(--muted); font-weight: 500; font-size: 0.85rem; }
 }
 .badge.missing { background: var(--warn-bg); border: 1px solid var(--warn-line); }
 .badge.ok { background: var(--ok-bg); border: 1px solid #a9c9a2; }
+.badge.locked { background: #e6eefb; border: 1px solid #8aa6d9; }
+.badge.main { background: var(--ok-bg); border: 1px solid #a9c9a2; }
+.badge.substitute { background: var(--warn-bg); border: 1px solid var(--warn-line); }
+.badge.empty { background: #f1f1ee; border: 1px solid var(--line); color: var(--muted); }
+
+.inline { display: inline; margin: 0; }
+button.small { padding: 0.25rem 0.7rem; font-size: 0.85rem; }
+button.small.secondary,
+.button.small.secondary {
+  background: transparent;
+  color: var(--accent-dark);
+  border: 1px solid var(--accent);
+}
+table.slots td { vertical-align: middle; }
+tr.empty-row td { background: #fbfbf9; }
+tr.reason-row td { border-bottom: 1px solid var(--line); padding-top: 0; }
 
 .flashes { margin-bottom: 1rem; }
 
